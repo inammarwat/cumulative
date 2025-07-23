@@ -9,39 +9,71 @@ execute:
 ---
 
 ```{r}
+library(MASS)
 library(tidyverse)
 library(primer.data)
 library(broom)
-library(MASS)
+library(easystats)
+library(ggplot2)
+library(marginaleffects)
 ```
 
 ```{r}
 x <- ces |>
   filter(year == 2020) |>
-  select(approval, education, ideology) |>
-  drop_na() |>
-  slice_sample(n = 2000)
+  select(approval, ideology, education) |>
+  drop_na() |> 
+  filter(! ideology %in% "Not Sure") |> 
+  mutate(ideology = fct_drop(ideology))
 ```
 
 ```{r}
-x |>
-  ggplot(aes(x = ideology, fill = approval)) +
-  geom_bar() +
+fit_approval <- polr(approval ~ ideology + education,
+                      data = x)
+```
+
+```{r}
+plot_predictions(fit_approval, 
+                 condition = c("ideology", "education")) +
   labs(
-    title = "Relationship Between President Approval and Political Ideology",
-    subtitle = "Most respondents, especially liberals, strongly disapprove of the president",
+    title = "Presidential Approval by Political Ideology and Education",
+    subtitle = "Very Liberal respondents show the highest approval, while Very Conservative respondents show the lowest—regardless of education level",
     x = "Political Ideology",
-    y = "Count",
-    fill = "Approval of the President",
-    caption = "Data from CES."
+    y = "Predicted Probability of Approval",
+    caption = "Data: 2020 Cooperative Election Study (CES)"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    plot.subtitle = element_text(margin = margin(b = 10)),
+    legend.position = "right"
   )
 ```
 
 Public opinion about political leaders often varies widely across different ideological groups.
 Using data from the 2020 Cooperative Election Study (CES), which includes responses from thousands of U.S. adults, we explore how political ideology relates to approval of the president.
-
+We model presidential approval as an ordinal function of political ideology and education level using a cumulative logistic regression model.
 However, because many CES respondents are part of the YouGov panel, they may not fully represent the broader U.S. population.
+People who are very conservative are more likely to approve of the president by about 5.6 points compared to those who are very liberal. We are 95% confident that the true difference lies between 4.9 and 6.2 points.
 
+```{r}
+library(gt)
+# Create table of estimates and confidence intervals
+tidy(fit_approval, conf.int = TRUE) |>
+  select(term, estimate, conf.low, conf.high) |>
+  mutate(across(estimate:conf.high, round, 3)) |>
+  gt() |>
+  tab_header(
+    title = "Estimates and 95% Confidence Intervals",
+    subtitle = "Cumulative Logistic Regression Model"
+  ) |>
+  cols_label(
+    term = "Variable",
+    estimate = "Estimate",
+    conf.low = "Lower 95% CI",
+    conf.high = "Upper 95% CI"
+  )
+```
 
 $$
 P(Y \leq k) = \frac{1}{1 + \exp\left( -\left( \alpha_k - \beta_1 \cdot \text{ideology} - \beta_2 \cdot \text{education} \right) \right)}
@@ -49,5 +81,12 @@ $$
 
 $$
 Y \sim \text{Ordinal}(\boldsymbol{\rho}) \quad \text{where} \quad \boldsymbol{\rho} = (\rho_1, \rho_2, \ldots, \rho_K)
+$$
+
+
+$$
+\begin{aligned}
+\log\left[ \frac { P(Y \leq j) }{ 1 - P(Y \leq j) } \right] &= \alpha_j + \beta_1 X_1 + \beta_2 X_2 + \ldots + \beta_k X_k
+\end{aligned}
 $$
 
